@@ -1,4 +1,4 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04 as builder
+FROM nvidia/cuda:11.3.0-cudnn8-devel-ubuntu18.04 as builder
 
 # Install reqs with cross compile support
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,33 +14,33 @@ RUN wget https://github.com/protocolbuffers/protobuf/releases/download/v3.9.1/pr
     rm protoc-3.9.1-linux-x86_64.zip
 
 # Install bazel
-RUN wget https://github.com/bazelbuild/bazel/releases/download/0.27.1/bazel_0.27.1-linux-x86_64.deb && \
-    dpkg -i bazel_0.27.1-linux-x86_64.deb && \
-    rm bazel_0.27.1-linux-x86_64.deb
+RUN wget https://github.com/bazelbuild/bazel/releases/download/3.7.2/bazel_3.7.2-linux-x86_64.deb && \
+    dpkg -i bazel_3.7.2-linux-x86_64.deb && \
+    rm bazel_3.7.2-linux-x86_64.deb
 
 # Download tensorflow sources
-ARG TF_VERSION="v2.1.0"
+ARG TF_VERSION="v2.5.0"
 ENV TF_VERSION $TF_VERSION
 RUN cd /opt && git clone https://github.com/tensorflow/tensorflow.git --branch $TF_VERSION --single-branch
 
 # Configure tensorflow
 ENV TF_NEED_GDR=0 TF_NEED_AWS=0 TF_NEED_GCP=0 TF_NEED_CUDA=1 TF_NEED_HDFS=0 TF_NEED_OPENCL_SYCL=0 TF_NEED_VERBS=0 TF_NEED_MPI=0 TF_NEED_MKL=0 TF_NEED_JEMALLOC=1 TF_ENABLE_XLA=0 TF_NEED_S3=0 TF_NEED_KAFKA=0 TF_NEED_IGNITE=0 TF_NEED_ROCM=0
+RUN ls -ltr /usr/local/
+RUN nvcc -V
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.3/compat
+ENV TF_CUDA_VERSION=11.3 TF_CUDNN_VERSION=8
 RUN cd /opt/tensorflow && yes '' | ./configure
 
 # Tensorflow build flags for rpi
-ENV BAZEL_COPT_FLAGS="--local_resources 16000,16,1 --config monolithic --copt=-O3 --copt=-fomit-frame-pointer --copt=-mfpmath=both --copt=-mavx --copt=-msse4.2 --incompatible_no_support_tools_in_action_inputs=false --config=noaws --config=nohdfs"
+ENV BAZEL_COPT_FLAGS="--config monolithic --copt=-O3 --copt=-fomit-frame-pointer --copt=-mfpmath=both --copt=-mavx --copt=-msse4.2 --config=noaws --config=nohdfs"
 ENV BAZEL_EXTRA_FLAGS=""
 
 # Patch to make it work with cuda 10.2
-RUN cd /opt/tensorflow && sed -i '/"--bin2c-path=%s" % bin2c.dirname,/d' third_party/nccl/build_defs.bzl.tpl
+# RUN cd /opt/tensorflow && sed -i '/"--bin2c-path=%s" % bin2c.dirname,/d' third_party/nccl/build_defs.bzl.tpl
 
-# Compile and build tensorflow lite
-RUN cd /opt/tensorflow && \
-    bazel build -c opt $BAZEL_COPT_FLAGS --verbose_failures $BAZEL_EXTRA_FLAGS //tensorflow/lite:libtensorflowlite.so && \
-    install bazel-bin/tensorflow/lite/libtensorflowlite.so /usr/local/lib/libtensorflowlite.so && \
-    bazel build -c opt $BAZEL_COPT_FLAGS --verbose_failures $BAZEL_EXTRA_FLAGS //tensorflow/lite/experimental/c:libtensorflowlite_c.so && \
-    install bazel-bin/tensorflow/lite/experimental/c/libtensorflowlite_c.so /usr/local/lib/libtensorflowlite_c.so && \
-    mkdir -p /usr/local/include/flatbuffers && cp bazel-tensorflow/external/flatbuffers/include/flatbuffers/* /usr/local/include/flatbuffers
+ENV BAZEL_PYTHON="/usr/bin/python3"
+ENV PYTHON_BIN_PATH="/usr/bin/python3"
+RUN apt install -y python3-distutils python3-numpy python3-six
 
 # Compile and install tensorflow shared library
 RUN cd /opt/tensorflow && \
@@ -102,7 +102,7 @@ RUN curl -kLo go${GO_VERSION}.linux-${GO_ARCH}.tar.gz https://dl.google.com/go/g
     tar -C /usr/local -xzf go${GO_VERSION}.linux-${GO_ARCH}.tar.gz && \
     rm go${GO_VERSION}.linux-${GO_ARCH}.tar.gz
 
-FROM nvidia/cuda:10.2-cudnn7-runtime-ubuntu18.04 as build
+FROM nvidia/cuda:11.3.0-cudnn8-runtime-ubuntu18.04 as build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config zip zlib1g-dev unzip wget bash-completion git curl \
@@ -125,7 +125,7 @@ WORKDIR /build
 ADD . .
 RUN make
 
-FROM nvidia/cuda:10.2-cudnn7-runtime-ubuntu18.04
+FROM nvidia/cuda:11.3.0-cudnn8-runtime-ubuntu18.04
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libusb-1.0 libc++-7-dev wget unzip ca-certificates libdc1394-22 libavcodec57 libavformat57 && \
@@ -136,13 +136,13 @@ WORKDIR /opt/doods
 COPY --from=build /usr/local/lib/. /usr/local/lib/.
 COPY --from=build /build/doods /opt/doods/doods
 ADD config.yaml /opt/doods/config.yaml
-ENV LD_LIBRARY_PATH=/usr/local/cuda-10.2/compat
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.3/compat
 RUN ldconfig
 
 # Download sample models
 RUN mkdir models
-RUN wget https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && unzip coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && rm coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && mv detect.tflite models/coco_ssd_mobilenet_v1_1.0_quant.tflite && rm labelmap.txt
-RUN wget https://dl.google.com/coral/canned_models/coco_labels.txt && mv coco_labels.txt models/coco_labels0.txt
+# RUN wget https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && unzip coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && rm coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip && mv detect.tflite models/coco_ssd_mobilenet_v1_1.0_quant.tflite && rm labelmap.txt
+# RUN wget https://dl.google.com/coral/canned_models/coco_labels.txt && mv coco_labels.txt models/coco_labels0.txt
 RUN wget http://download.tensorflow.org/models/object_detection/faster_rcnn_inception_v2_coco_2018_01_28.tar.gz && tar -zxvf faster_rcnn_inception_v2_coco_2018_01_28.tar.gz faster_rcnn_inception_v2_coco_2018_01_28/frozen_inference_graph.pb --strip=1 --no-same-owner && mv frozen_inference_graph.pb models/faster_rcnn_inception_v2_coco_2018_01_28.pb && rm faster_rcnn_inception_v2_coco_2018_01_28.tar.gz
 RUN wget https://raw.githubusercontent.com/amikelive/coco-labels/master/coco-labels-2014_2017.txt && mv coco-labels-2014_2017.txt models/coco_labels1.txt
 

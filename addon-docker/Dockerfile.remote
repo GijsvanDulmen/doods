@@ -1,0 +1,28 @@
+FROM snowzach/doods:amd64
+
+WORKDIR /opt/doods
+
+RUN wget https://github.com/google-coral/test_data/raw/master/inception_v4_299_quant_edgetpu.tflite && mv inception_v4_299_quant_edgetpu.tflite models/inception_v4_299_quant_edgetpu.tflite
+RUN wget https://github.com/google-coral/test_data/raw/master/imagenet_labels.txt && mv imagenet_labels.txt models/imagenet_labels2.txt
+
+# RUN wget https://github.com/google-coral/test_data/raw/master/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite && mv ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite models/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite
+# RUN wget https://github.com/google-coral/test_data/raw/master/coco_labels.txt && mv coco_labels.txt models/coco_labels2.txt
+
+RUN wget https://dl.google.com/coral/canned_models/mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite && mv mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite models/mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite
+RUN wget https://raw.githubusercontent.com/amikelive/coco-labels/master/coco-labels-2014_2017.txt && mv coco-labels-2014_2017.txt models/coco_labels2.txt
+
+ADD lite-model_efficientdet_lite0_detection_default_1_edgetpu.tflite models/
+ADD lite-model_efficientdet_lite0_int8_1_edgetpu.tflite models/
+
+# add mobile net v2
+ADD ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite models/
+ADD coco_labels_v2.txt models/
+
+ADD ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite models/
+ADD coco_labels_mobiledet.txt models/
+
+ADD ssd_mobilenet_v2_face_quant_postprocess_edgetpu.tflite models/
+
+ADD config.yaml config.yaml
+
+CMD ["/opt/doods/doods", "-c", "/opt/doods/config.yaml", "api"]

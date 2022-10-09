@@ -5,9 +5,7 @@ doods
 *.bmp
 *.ppm
 *.jpg
-*.tflite
 *.zip
 private
-models
 example.yaml
 libedgetpu
